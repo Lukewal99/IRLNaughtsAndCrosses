@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 import time
 from functools import *
+import random
 
 GREEN = (0, 255, 0)
 
@@ -47,6 +48,39 @@ def scale_contour(contour, scale):
     contour = (contour * scale).astype(np.int32)
     contour = contour + mid
     return contour
+
+# Takes a contour and works out its position on the board
+#def contour_position(contour):
+#    moments = cv2.moments(contour)
+#    midX = moments["m10"] / moments["m00"]
+#    midY = moments["m01"] / moments["m00"]
+#    tolerance = 50 # Ignore variations in Y less than this number of pixels
+#    ofset = 20 # Hack to overcome fixed boundaries of tolerance
+#    # Test Code to prove working
+#    #return random.randint(0,100)
+#    r = (((1000 - midY + ofset) // tolerance) * tolerance) + midX
+#    print(str(midX) + " " + str(midY) + " " + str(r))
+#    return(r)
+
+# Takes a Bounding Box and works out its position on the board
+# Seems to work, but needs further testing and making more robust
+def bounding_box_position(boundingBox):
+    tolerance = 11 # Ignore variations in Y less than this number of pixels
+    #ret = (1000 - ((boundingBox[1]) // tolerance) * tolerance^2) + (boundingBox[0])
+    ret = (boundingBox[1] * tolerance) + (boundingBox[0])
+    #print(str(boundingBox[0]) + " " + str(boundingBox[1]) + " " + str(ret))
+    return(ret)
+
+def ox_detection(boundingBox, testName):
+    x,y,w,h = boundingBox
+    #smallGridI = cv2.rectangle(originalI,(x,y),(x+w,y+h),GREEN,2)
+
+    mask = np.zeros((grayI.shape), np.uint8) # Return a new array of zeros of grayI.shape size of type uint8
+    cv2.rectangle(mask,(x,y),(x+w,y+h),255,-1)
+
+    # Merge the image and mask
+    masked = cv2.bitwise_and(originalI, originalI, mask=mask)
+    cv2.imshow(testName, masked)
 
 
 # Main
@@ -113,46 +147,54 @@ if cap.isOpened():
         # Find the contours in the masked image
         contours, _ = cv2.findContours(maskedI, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
-        # Find all contours with area greater than 100
+        # Find all contours with area greater than X and less than Y
+        # Removes any small error contours and and the largest box (grid surrounding, as it is drawn out by edges of smaller boxes)
         gridContours = []
         for contour in contours:
             area = cv2.contourArea(contour)
-            # Remove any small imperfections, and the largest box (grid surrounding, as it is drawn out by edges of smaller boxes)
-            if area > 100 and area < 100000:
+            if area > 2000 and area < 100000:
+                #print(area)
                 gridContours.append(contour)
                 #time.sleep(1)
-                #cv2.waitKey(0)
-                finalI = cv2.drawContours(finalI, [contour], -1, GREEN, 3)
+                #finalI = cv2.drawContours(finalI, [contour], -1, GREEN, 3)
                 #cv2.imshow("Final Image", finalI)
 
-        if len(gridContours) != 9:
+        # Simplify gridContours into gridBoundingBoxes
+        gridBoundingBoxes = [cv2.boundingRect(c) for c in gridContours]
+
+        print(gridBoundingBoxes)
+
+        if len(gridBoundingBoxes) != 9:
             print("ERROR: Not 9 grid squares detected!")
         else:
-         #   finalI = cv2.drawContours(finalI, gridContours, -1, GREEN, 3)
+            #finalI = cv2.drawContours(finalI, gridContours, -1, GREEN, 3)
             # Show the last image
-            cv2.imshow("Final Image", finalI)
+            #cv2.imshow("Final Image", finalI)
 
-            avg = reduce(
-                lambda total, arr : total + arr[0] ,
-                gridContours)
-
-            print("avg: " + avg) 
+            # Sort gridContours into the same order as board
+            gridBoundingBoxes.sort(key=lambda bb:bounding_box_position(bb))
+           
+            print(gridBoundingBoxes)
+            print()
 
             # todo sort grid squares into same order as board
-            contourCentres = []
-            for contour in gridContours:
-                contourXTotal = 0
-                contourYTotal = 0
-                for xy in contour:
-                    contourXTotal = contourXTotal + xy[0][0]
-                    contourYTotal = contourYTotal + xy[0][1]
-                contourXAvg = contourXTotal / len(contour)
-                contourYAvg = contourYTotal / len(contour)
-                print(str(contourXAvg) + " " + str(contourYAvg))
-                #contourCentres.append([contourXAvg,contourYAvg])
-                
+            #gridContoursAverage = []
+            #for c, contour in enumerate(gridContours):
+            #    contourXTotal = 0
+            #    contourYTotal = 0
+            #    for xy in contour:
+            #        contourXTotal = contourXTotal + xy[0][0]
+            #        contourYTotal = contourYTotal + xy[0][1]
+            #    contourXAvg = contourXTotal / len(contour)
+            #    contourYAvg = contourYTotal / len(contour)
+            #    print("ContourXY Averages: " + str(contourXAvg) + " " + str(contourYAvg))
+            #    gridContours[c] = [contour, [contourXAvg, contourYAvg] ]
 
-        time.sleep(1)
+            ox_detection(gridBoundingBoxes[0], "Small Grid 0")
+            ox_detection(gridBoundingBoxes[1], "Small Grid 1")
+            ox_detection(gridBoundingBoxes[2], "Small Grid 2") 
+
+        time.sleep(5)
             #cv2.waitKey(0)
             
         # This also acts as (Copied notes - what does this mean? -Luke)
