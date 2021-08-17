@@ -7,13 +7,15 @@ from functools import *
 import random
 
 GREEN = (0, 255, 0)
+BLACK = 255
+WHITE = 0
 
 # Define the camera command
 # To flip the image, modify the flip_method parameter (0 and 2 are the most common)
 def gstreamer_pipeline(
-    capture_width=1280,
+    capture_width=720, # 1280,
     capture_height=720,
-    display_width=1280,
+    display_width=720, # 1280,
     display_height=720,
     framerate=10,
     flip_method=1,
@@ -66,21 +68,20 @@ def scale_contour(contour, scale):
 # Seems to work, but needs further testing and making more robust
 def bounding_box_position(boundingBox):
     tolerance = 11 # Ignore variations in Y less than this number of pixels
-    #ret = (1000 - ((boundingBox[1]) // tolerance) * tolerance^2) + (boundingBox[0])
     ret = (boundingBox[1] * tolerance) + (boundingBox[0])
     #print(str(boundingBox[0]) + " " + str(boundingBox[1]) + " " + str(ret))
     return(ret)
 
 def ox_detection(boundingBox, testName):
     x,y,w,h = boundingBox
-    #smallGridI = cv2.rectangle(originalI,(x,y),(x+w,y+h),GREEN,2)
 
+    # Create a mask of the largest contour
     mask = np.zeros((grayI.shape), np.uint8) # Return a new array of zeros of grayI.shape size of type uint8
-    cv2.rectangle(mask,(x,y),(x+w,y+h),255,-1)
+    cv2.rectangle(mask, (x,y), (x+w,y+h), BLACK, -1)
 
     # Merge the image and mask
-    masked = cv2.bitwise_and(originalI, originalI, mask=mask)
-    cv2.imshow(testName, masked)
+    maskedI = cv2.copyTo(originalI, mask)
+    cv2.imshow(testName, maskedI)
 
 
 # Main
@@ -89,22 +90,23 @@ cap = cv2.VideoCapture(gstreamer_pipeline(), cv2.CAP_GSTREAMER)
 print("--- CAPTURE OPEN END ---")
 if cap.isOpened():
     print("--- CAMERA IS OPENED ---")
-    # ToDo Why do we need this window?  Can we get rid of it?  Or draw our image in it?
-    window_handle = cv2.namedWindow("CSI Camera", cv2.WINDOW_AUTOSIZE)
-    # ToDo What does this check for and why
-    while cv2.getWindowProperty("CSI Camera", 0) >= 0:
+    #window_handle = cv2.namedWindow("CSI Camera", cv2.WINDOW_AUTOSIZE)
+    #while cv2.getWindowProperty("CSI Camera", 0) >= 0:
+    while 1:
         # Read Camera Image, throwing away first 9 from buffer
         for _ in range(10):
             ret_val, originalI = cap.read()
         # Grayscale as colour information is not relevant
         grayI = cv2.cvtColor(originalI, cv2.COLOR_BGR2GRAY)
         # Blur image to reduce noise
-        blurI = cv2.GaussianBlur(grayI, (5,5), 0)
-        #cv2.imshow("BlurI", blurI)
-        # Threshold - why, what do the numbers mean?
-        # How can we reduce interferance here?
-        threshI = cv2.adaptiveThreshold(blurI, 255, 1, 1, 11, 2)
+        blurI = cv2.GaussianBlur(grayI, (7, 7), 0)
+        # Threshold image to turn black and white
+        # threshI = cv2.adaptiveThreshold(blurI, 255, 1, 1, 11, 2)
+        threshI = cv2.adaptiveThreshold(blurI, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,\
+            cv2.THRESH_BINARY_INV, 51, 4)
+
         #cv2.imshow("threshI", threshI)
+        #cv2.waitKey(0)
         
         # Find all the contours in the image
         # Each contour is an array of (x,y) coordinates of boundary points of the objects
@@ -123,26 +125,23 @@ if cap.isOpened():
             if area > max_area:
                 max_area = area
                 best_contour = contour
-        # Once we've found the largest contour, draw it onto a copy of the original image and display
-        largestI = cv2.drawContours(originalI.copy(), contours, c, GREEN, 3)
-        #cv2.imshow("largestI", largestI)
 
         # Increase size of contour so we dont loose outer black box
         best_contour = scale_contour(best_contour, 1.05)
 
         # Create a mask of the largest contour
         mask = np.zeros((grayI.shape), np.uint8) # Return a new array of zeros of grayI.shape size of type uint8
-        cv2.drawContours(mask, [best_contour], 0, 255, -1) # What are these values?
-        cv2.drawContours(mask, [best_contour], 0, 0, 2)
+        # drawcontours(source_image, contours, contours_ID, contour_color, contour_thickness)
+        cv2.drawContours(mask, [best_contour], 0, BLACK, -1) # -1 means everything outside the contour
+        #cv2.drawContours(mask, [best_contour], 0, WHITE, 2) 
 
-        # Merge the image and mask
-        maskedI = np.zeros_like(threshI)
-        maskedI[mask == 255] = threshI[mask == 255]
+        # Merge the thresholded image and mask
+        #maskedI = np.zeros_like(threshI)
+        #maskedI[mask == 255] = threshI[mask == 255]
+        maskedI = cv2.copyTo(threshI, mask)
 
         #cv2.imshow("maskedI", maskedI)
-
-        # Create a copy of the original image to draw the final contours on
-        finalI = originalI.copy()
+        #cv2.waitKey(0) # Must always waitKey after an imshow, 0 is for a key, or ms
 
         # Find the contours in the masked image
         contours, _ = cv2.findContours(maskedI, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
@@ -152,12 +151,9 @@ if cap.isOpened():
         gridContours = []
         for contour in contours:
             area = cv2.contourArea(contour)
-            if area > 2000 and area < 100000:
+            if area > 5000 and area < 100000:
                 #print(area)
                 gridContours.append(contour)
-                #time.sleep(1)
-                #finalI = cv2.drawContours(finalI, [contour], -1, GREEN, 3)
-                #cv2.imshow("Final Image", finalI)
 
         # Simplify gridContours into gridBoundingBoxes
         gridBoundingBoxes = [cv2.boundingRect(c) for c in gridContours]
@@ -167,9 +163,9 @@ if cap.isOpened():
         if len(gridBoundingBoxes) != 9:
             print("ERROR: Not 9 grid squares detected!")
         else:
-            #finalI = cv2.drawContours(finalI, gridContours, -1, GREEN, 3)
-            # Show the last image
-            #cv2.imshow("Final Image", finalI)
+            gridI = cv2.drawContours(originalI.copy(), gridContours, -1, GREEN, 3)
+            #cv2.imshow("Masked Grid Image", gridI)
+            #cv2.waitKey(0)
 
             # Sort gridContours into the same order as board
             gridBoundingBoxes.sort(key=lambda bb:bounding_box_position(bb))
@@ -190,18 +186,17 @@ if cap.isOpened():
             #    print("ContourXY Averages: " + str(contourXAvg) + " " + str(contourYAvg))
             #    gridContours[c] = [contour, [contourXAvg, contourYAvg] ]
 
-            ox_detection(gridBoundingBoxes[0], "Small Grid 0")
-            ox_detection(gridBoundingBoxes[1], "Small Grid 1")
-            ox_detection(gridBoundingBoxes[2], "Small Grid 2") 
+            ox_detection(gridBoundingBoxes[6], "Small Grid 0")
+            ox_detection(gridBoundingBoxes[7], "Small Grid 1")
+            ox_detection(gridBoundingBoxes[8], "Small Grid 2") 
 
-        time.sleep(5)
-            #cv2.waitKey(0)
+            cv2.waitKey(0)
             
         # This also acts as (Copied notes - what does this mean? -Luke)
-        keyCode = cv2.waitKey(30) & 0xFF
+        #keyCode = cv2.waitKey(30) & 0xFF
         # Stop the program on the ESC key
-        if keyCode == 27:
-            break
+        #if keyCode == 27:
+        #    break
     cap.release()
     cv2.destroyAllWindows()
 else:
