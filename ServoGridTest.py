@@ -9,6 +9,7 @@ import time
 import random
 import NaughtsAndCrossesLib as NaC
 import math as maths
+import signal
 
 # Variables
 laserPointerPin = "DAP4_SCLK" # BCM pin 18, BOARD pin 12
@@ -35,13 +36,19 @@ grid = ((startX+stepX, startY+stepY), (startX, startY+stepY), (startX-stepX, sta
         (startX+stepX, startY),             (startX, startY),       (startX-stepX, startY),
         (startX+stepX, startY-stepY), (startX, startY-stepY), (startX-stepX, startY-stepY))
 
-# Setup
-kit = ServoKit(channels=16)
-#print(GPIO.getmode())
-#GPIO.setmode(GPIO.BCM)  # BCM pin-numbering scheme from Raspberry Pi
-GPIO.setup(laserPointerPin, GPIO.OUT, initial=GPIO.LOW) # Set pin as an output pin with optional initial state of LOW
-
 # Functions
+# Setup
+def setup():
+    global kit
+    kit = ServoKit(channels=16)
+    #print(GPIO.getmode())
+    #GPIO.setmode(GPIO.BCM)  # BCM pin-numbering scheme from Raspberry Pi
+    GPIO.setup(laserPointerPin, GPIO.OUT, initial=GPIO.LOW) # Set pin as an output pin with optional initial state of LOW
+    # Catch ^C etc and exit gracefully
+    signal.signal(signal.SIGINT, handler)
+
+
+# Point Laser at each square of the grid in turn to check alignment
 def testGrid():
     print("Test Grid")
     for gridPosition in grid:
@@ -54,6 +61,7 @@ def testGrid():
         GPIO.output(laserPointerPin, GPIO.LOW) # Turn OFF pointer
 
 
+# Draw an O with the Laser at the specified gridXY
 def drawO(gridXY):
     print("Draw O")
     # Move to start position
@@ -77,9 +85,8 @@ def drawO(gridXY):
         time.sleep(0.02 * speed)
     GPIO.output(laserPointerPin, GPIO.LOW) # Turn OFF pointer
 
-        
-        
 
+# Draw an X with the Laser at the specified gridXY
 def drawX(gridXY):
     print("Draw X")
     
@@ -123,19 +130,22 @@ def drawX(gridXY):
         time.sleep(0.017 * speed)
     GPIO.output(laserPointerPin, GPIO.LOW) # Turn OFF pointer
     
-    
+
+def handler(signum, frame):
+    GPIO.output(laserPointerPin, GPIO.LOW) # Turn OFF pointer
+    exit(1)
 
 # Main
 def main():
+    setup()
     testGrid()
-    #time.sleep(1)
+    time.sleep(1)
     #drawO(grid[4])
-    #time.sleep(1)
-    #for j in range(9): drawX(grid[j])
-    #for k in range(9): drawO(grid[k])
+    #drawX(grid[4])
+    time.sleep(1)
+    for j in range(9): drawX(grid[j])
+    for k in range(9): drawO(grid[k])
     GPIO.cleanup()
-
-
 
 
 if __name__ == '__main__':
