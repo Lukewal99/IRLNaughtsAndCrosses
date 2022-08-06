@@ -63,6 +63,7 @@ def scale_bounding_box(boundingBox, scale):
 
     
 # Takes a contour and works out its position on the board
+
 #def contour_position(contour):
 #    moments = cv2.moments(contour)
 #    midX = moments["m10"] / moments["m00"]
@@ -83,36 +84,59 @@ def bounding_box_position(boundingBox):
     #print(str(boundingBox[0]) + " " + str(boundingBox[1]) + " " + str(ret))
     return(ret)
 
-def ox_detection(boundingBox, testName):
+# We didn't see the hashed code above (which doesnt work). so we used the bounding_box_position
+def contour_position(contour):
+     return(bounding_box_position(cv2.boundingRect(contour)))
+
+def contour_properties(contour):
+    peri = cv2.arcLength(contour, True)
+
+    approx = cv2.approxPolyDP(contour, 0.01 * peri, True)
+    noSides = len(approx)
+
+    area = cv2.contourArea(contour)
+
+    print("Perimiter: " + str(int(peri)) + " " + "Number of sides: " + str(int(noSides)) + " Area: " + str(int(area)))
+    
+def ox_detection(contour, testName):
     # Reduces the bounding box to remove post-it note
-    x,y,w,h = scale_bounding_box(boundingBox, 0.9)
-    print("x: " + str(x) + "y: " + str(y) + "w: " + str(w) + "h: " + str(h))
+    reducedContour = scale_contour(contour, 0.9)
 
     # Create a mask of the largest contour
     mask = np.zeros((grayI.shape), np.uint8) # Return a new array of zeros of grayI.shape size of type uint8
-    cv2.rectangle(mask, (x,y), (x+w,y+h), BLACK, -1)
+    cv2.drawContours(mask, [reducedContour], 0, BLACK, -1)
 
+    # Create a red-only threshold
+
+    # The order of the colors is blue, green, red
+    lower = (0,0,100)
+    upper = (70,70,255)
+
+    # TODO Need to blur original first?
+    mask = cv2.inRange(originalI, lower, upper)
+    #redThreshI = cv2.bitwise_and(originalI, originalI, mask = mask)
+    #mask_rgb = cv2.cvtColor(mask,cv2.COLOR_GRAY2BGR)
+    #redThreshI = originalI & mask_rgb
+
+    #cv2.imshow(testName + "red", redThreshI)
+    
     # Merge the image and mask
-    maskedThreshI = cv2.copyTo(threshI, mask)
+    maskedRedThreshI = cv2.copyTo(grayI, mask)
     maskedOriginalI = cv2.copyTo(originalI, mask)
-    #cv2.imshow(testName, maskedI)
+    
+    cv2.imshow(testName, maskedRedThreshI)
+    cv2.imshow(testName, maskedOriginalI)
+    cv2.waitKey(0)
 
-    #Find the contour of the shape inside the bounding box
-    contours, _ = cv2.findContours(maskedThreshI, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    allcontoursI = cv2.drawContours(maskedOriginalI.copy(), contours, -1, GREEN, 3)
-    cv2.imshow(testName, allcontoursI)
+    #Find the contour of the shape inside the grid square
+    #contours, _ = cv2.findContours(maskedRedThreshI, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    #allcontoursI = cv2.drawContours(maskedOriginalI.copy(), contours, -1, GREEN, 3)
+    #cv2.imshow(testName, allcontoursI)
 
-    #starting minimum
-    max_area = 0
-    for c, contour in enumerate(contours):
-        area = cv2.contourArea(contour)
-        if area > max_area:
-            max_area = area
-            largest_contour = contour
+    #print(testName + " has " + str(len(contours)) + " Contours")
+    #for c in contours:
+    #    contour_properties(c)
 
-    # TO DO NEXT -----------------------------------------------------------------------
-    # Change Bounding Boxes for Contours - to help eliminate outer boundary with scaling
-    # Or De-warp image early
 
 # Main
 print("--- CAPTURE OPEN START ---")
@@ -144,9 +168,10 @@ if cap.isOpened():
 
         # Draw all contours and display
         allcontoursI = cv2.drawContours(originalI.copy(), contours, -1, GREEN, 3)
-        cv2.imshow("allcontoursI", allcontoursI)
-        cv2.waitKey(0)
-        cv2.destroyWindow("allcontoursI")
+        
+        #cv2.imshow("allcontoursI", allcontoursI)
+        #cv2.waitKey(0)
+        #cv2.destroyWindow("allcontoursI")
         
         # Find the contour with the largest area - ie the outside square of the grid
         # ToDo Make this routine safer - 4 sides?
@@ -172,9 +197,9 @@ if cap.isOpened():
         #maskedI[mask == 255] = threshI[mask == 255]
         maskedI = cv2.copyTo(threshI, mask)
 
-        cv2.imshow("maskedI", maskedI)
-        cv2.waitKey(0)# Must always waitKey after an imshow, 0 is for a key, or ms
-        cv2.destroyWindow("maskedI")
+        #cv2.imshow("maskedI", maskedI)
+        #cv2.waitKey(0)# Must always waitKey after an imshow, 0 is for a key, or ms
+        #cv2.destroyWindow("maskedI")
 
         # Find the contours in the masked image
         contours, _ = cv2.findContours(maskedI, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
@@ -188,41 +213,22 @@ if cap.isOpened():
                 #print(area)
                 gridContours.append(contour)
 
-        # Simplify gridContours into gridBoundingBoxes
-        gridBoundingBoxes = [cv2.boundingRect(c) for c in gridContours]
 
-        print(gridBoundingBoxes)
-
-        if len(gridBoundingBoxes) != 9:
+        if len(gridContours) != 9:
             print("ERROR: Not 9 grid squares detected!")
         else:
             gridI = cv2.drawContours(originalI.copy(), gridContours, -1, GREEN, 3)
-            cv2.imshow("Masked Grid Image", gridI)
-            cv2.waitKey(0)# Must always waitKey after an imshow, 0 is for a key, or ms
-            cv2.destroyWindow("Masked Grid Image")
+            
+            #cv2.imshow("Masked Grid Image", gridI)
+            #cv2.waitKey(0)# Must always waitKey after an imshow, 0 is for a key, or ms
+            #cv2.destroyWindow("Masked Grid Image")
 
             # Sort gridContours into the same order as board
-            gridBoundingBoxes.sort(key=lambda bb:bounding_box_position(bb))
-           
-            print(gridBoundingBoxes)
-            print()
+            gridContours.sort(key=lambda gC:contour_position(gC))
 
-            # todo sort grid squares into same order as board
-            #gridContoursAverage = []
-            #for c, contour in enumerate(gridContours):
-            #    contourXTotal = 0
-            #    contourYTotal = 0
-            #    for xy in contour:
-            #        contourXTotal = contourXTotal + xy[0][0]
-            #        contourYTotal = contourYTotal + xy[0][1]
-            #    contourXAvg = contourXTotal / len(contour)
-            #    contourYAvg = contourYTotalx_detection / len(contour)
-            #    print("ContourXY Averages: " + str(contourXAvg) + " " + str(contourYAvg))
-            #    gridContours[c] = [contour, [contourXAvg, contourYAvg] ]
-
-            ox_detection(gridBoundingBoxes[0], "Small Grid 0")
-            ox_detection(gridBoundingBoxes[1], "Small Grid 1")
-            ox_detection(gridBoundingBoxes[2], "Small Grid 2") 
+            ox_detection(gridContours[0], "Small Grid 0")
+            ox_detection(gridContours[1], "Small Grid 1")
+            ox_detection(gridContours[2], "Small Grid 2") 
 
             cv2.waitKey(0)
             
