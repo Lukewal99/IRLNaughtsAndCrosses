@@ -89,27 +89,6 @@ def drawO(gridXY):
 # Draw an X with the Laser at the specified gridXY
 def drawX(gridXY):
     print("Draw X")
-    
-    # Top right starting pos
-    x = radiusX * (-10 / 10)
-    y = radiusY * (-10 / 10)
-    print(" x / y " + str(x) + " / " + str(y))
-    kit.servo[X].angle = gridXY[X] + x
-    kit.servo[Y].angle = gridXY[Y] - y
-    time.sleep(0.2 * speed) # Time to position from anywhere on the grid
-    GPIO.output(laserPointerPin, GPIO.HIGH) # Turn ON pointer
-    time.sleep(0.017 * speed)
-    
-    # Scan top right to bottom left
-    for i in range(-9, 11):
-        x = radiusX * (i / 10)
-        y = radiusY * (i / 10)
-        print(" x / y " + str(x) + " / " + str(y))
-        kit.servo[X].angle = gridXY[X] + x
-        kit.servo[Y].angle = gridXY[Y] - y
-        time.sleep(0.017 * speed)
-    GPIO.output(laserPointerPin, GPIO.LOW) # Turn OFF pointer
-    
     # Top left starting pos
     x = radiusX * (-10 / 10)
     y = radiusY * (-10 / 10)
@@ -129,7 +108,28 @@ def drawX(gridXY):
         kit.servo[Y].angle = gridXY[Y] - y
         time.sleep(0.017 * speed)
     GPIO.output(laserPointerPin, GPIO.LOW) # Turn OFF pointer
-    
+   
+
+     # Top right starting pos
+    x = radiusX * (-10 / 10)
+    y = radiusY * (-10 / 10)
+    print(" x / y " + str(x) + " / " + str(y))
+    kit.servo[X].angle = gridXY[X] + x
+    kit.servo[Y].angle = gridXY[Y] - y
+    time.sleep(0.2 * speed) # Time to position from anywhere on the grid
+    GPIO.output(laserPointerPin, GPIO.HIGH) # Turn ON pointer
+    time.sleep(0.017 * speed)
+
+    # Scan top right to bottom left
+    for i in range(-9, 11):
+        x = radiusX * (i / 10)
+        y = radiusY * (i / 10)
+        print(" x / y " + str(x) + " / " + str(y))
+        kit.servo[X].angle = gridXY[X] + x
+        kit.servo[Y].angle = gridXY[Y] - y
+        time.sleep(0.017 * speed)
+    GPIO.output(laserPointerPin, GPIO.LOW) # Turn OFF pointer
+
 
 def handler(signum, frame):
     GPIO.output(laserPointerPin, GPIO.LOW) # Turn OFF pointer
