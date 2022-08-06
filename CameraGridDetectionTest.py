@@ -147,7 +147,7 @@ if cap.isOpened():
     #window_handle = cv2.namedWindow("CSI Camera", cv2.WINDOW_AUTOSIZE)
     #while cv2.getWindowProperty("CSI Camera", 0) >= 0:
     while 1:
-        # Read Camera Image, throwing away first 9 from buffer
+        # Read Camera Image, throwing away first X from buffer
         for _ in range(12):
             ret_val, originalI = cap.read()
         # Grayscale as colour information is not relevant
@@ -159,19 +159,21 @@ if cap.isOpened():
         threshI = cv2.adaptiveThreshold(blurI, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,\
             cv2.THRESH_BINARY_INV, 51, 4)
 
-        #cv2.imshow("threshI", threshI)
-        #cv2.waitKey(0)
+        print("Grayscaled, Blured & Thresholded image")
+        cv2.imshow("threshI", threshI)
+        cv2.waitKey(0)
         
         # Find all the contours in the image
         # Each contour is an array of (x,y) coordinates of boundary points of the objects
         contours, _ = cv2.findContours(threshI, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
-        # Draw all contours and display
+        # Draw all contours
         allcontoursI = cv2.drawContours(originalI.copy(), contours, -1, GREEN, 3)
         
-        #cv2.imshow("allcontoursI", allcontoursI)
-        #cv2.waitKey(0)
-        #cv2.destroyWindow("allcontoursI")
+        print("Contoured image")
+        cv2.imshow("allcontoursI", allcontoursI)
+        cv2.waitKey(0)
+        cv2.destroyWindow("allcontoursI")
         
         # Find the contour with the largest area - ie the outside square of the grid
         # ToDo Make this routine safer - 4 sides?
@@ -197,15 +199,17 @@ if cap.isOpened():
         #maskedI[mask == 255] = threshI[mask == 255]
         maskedI = cv2.copyTo(threshI, mask)
 
-        #cv2.imshow("maskedI", maskedI)
-        #cv2.waitKey(0)# Must always waitKey after an imshow, 0 is for a key, or ms
-        #cv2.destroyWindow("maskedI")
+        print("Largest contour masked")
+        cv2.imshow("maskedI", maskedI)
+        cv2.waitKey(0)# Must always waitKey after an imshow, 0 is for a key, or ms
+        cv2.destroyWindow("maskedI")
 
         # Find the contours in the masked image
         contours, _ = cv2.findContours(maskedI, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
         # Find all contours with area greater than X and less than Y
-        # Removes any small error contours and and the largest box (grid surrounding, as it is drawn out by edges of smaller boxes)
+        # Removes any small error contours and and the largest box 
+        # (grid surrounding, as it is drawn out by edges of smaller boxes)
         gridContours = []
         for contour in contours:
             area = cv2.contourArea(contour)
@@ -219,9 +223,10 @@ if cap.isOpened():
         else:
             gridI = cv2.drawContours(originalI.copy(), gridContours, -1, GREEN, 3)
             
-            #cv2.imshow("Masked Grid Image", gridI)
-            #cv2.waitKey(0)# Must always waitKey after an imshow, 0 is for a key, or ms
-            #cv2.destroyWindow("Masked Grid Image")
+            print("Nine grid squares image")
+            cv2.imshow("Masked Grid Image", gridI)
+            cv2.waitKey(0)# Must always waitKey after an imshow, 0 is for a key, or ms
+            cv2.destroyWindow("Masked Grid Image")
 
             # Sort gridContours into the same order as board
             gridContours.sort(key=lambda gC:contour_position(gC))
