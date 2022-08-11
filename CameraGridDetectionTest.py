@@ -10,6 +10,10 @@ GREEN = (0, 255, 0)
 BLACK = 255
 WHITE = 0
 
+DETECTEDNONE = 0
+DETECTEDX = 1
+DETECTEDO = 2
+
 # Define the camera command
 # To flip the image, modify the flip_method parameter (0 and 2 are the most common)
 def gstreamer_pipeline(
@@ -51,91 +55,83 @@ def scale_contour(contour, scale):
     contour = contour + mid
     return contour
 
-def scale_bounding_box(boundingBox, scale):
-    x,y,w,h = boundingBox
-    
-    x = int( x + (w * (1 - scale)) )
-    y = int( y + (h * (1 - scale)) )
-    w = int( w * scale )
-    h = int( h * scale )
-    return(x,y,w,h)
+# Shrinks or grows a bounding box by the given factor and Returns the resized BoundingBox
+#def scale_bounding_box(boundingBox, scale):
+#    x,y,w,h = boundingBox
+#    
+#    x = int( x + (w * (1 - scale)) )
+#    y = int( y + (h * (1 - scale)) )
+#    w = int( w * scale )
+#    h = int( h * scale )
+#    return(x,y,w,h)
 
-
-    
-# Takes a contour and works out its position on the board
-
-#def contour_position(contour):
-#    moments = cv2.moments(contour)
-#    midX = moments["m10"] / moments["m00"]
-#    midY = moments["m01"] / moments["m00"]
-#    tolerance = 50 # Ignore variations in Y less than this number of pixels
-#    ofset = 20 # Hack to overcome fixed boundaries of tolerance
-#    # Test Code to prove working
-#    #return random.randint(0,100)
-#    r = (((1000 - midY + ofset) // tolerance) * tolerance) + midX
-#    print(str(midX) + " " + str(midY) + " " + str(r))
-#    return(r)
 
 # Takes a Bounding Box and works out its position on the board
-# Seems to work, but needs further testing and making more robust
 def bounding_box_position(boundingBox):
     tolerance = 11 # Ignore variations in Y less than this number of pixels
     ret = (boundingBox[1] * tolerance) + (boundingBox[0])
     #print(str(boundingBox[0]) + " " + str(boundingBox[1]) + " " + str(ret))
     return(ret)
 
-# We didn't see the hashed code above (which doesnt work). so we used the bounding_box_position
+
+# Return a number representing the relative position of a contour
+# 0 is top left, maximum result is botton right
 def contour_position(contour):
      return(bounding_box_position(cv2.boundingRect(contour)))
 
+# Returns the various properties of passed in contours
+def contours_properties(contours):
+    print("Number of contours: " + str(len(contours)))
+    for contour in contours:
+        contour_properties(contour)
+
 def contour_properties(contour):
     peri = cv2.arcLength(contour, True)
+
+    noRawSides = len(contour)
 
     approx = cv2.approxPolyDP(contour, 0.01 * peri, True)
     noSides = len(approx)
 
     area = cv2.contourArea(contour)
 
-    print("Perimiter: " + str(int(peri)) + " " + "Number of sides: " + str(int(noSides)) + " Area: " + str(int(area)))
-    
-def ox_detection(contour, testName):
-    # Reduces the bounding box to remove post-it note
-    reducedContour = scale_contour(contour, 0.9)
+    print("Perimiter: " + str(int(peri)) + " " + "Number of sides: " + str(int(noSides)) + " Area: " + str(int(area)) + " NO Raw Sides " + str(int(noRawSides)))
+
+
+# Detect O, X or Nothing in provided contour
+def ox_detection(gridContour):
+
+    # Reduce the grid contour to remove the outer box
+    gridContour = scale_contour(gridContour, 0.95)
+
+    # Create new image of just the grid square (use exact code as you do in main)
 
     # Create a mask of the largest contour
     mask = np.zeros((grayI.shape), np.uint8) # Return a new array of zeros of grayI.shape size of type uint8
-    cv2.drawContours(mask, [reducedContour], 0, BLACK, -1)
+    # drawcontours(source_image, contours, contours_ID, contour_color, contour_thickness)
+    cv2.drawContours(mask, [gridContour], 0, BLACK, -1) # -1 means everything outside the contour
+    # Merge the thresholded image and mask
+    gridThreshI = cv2.copyTo(threshI, mask)
 
-    # Create a red-only threshold
+    # Find contours within image of just the single grid square (copy from main)
 
-    # The order of the colors is blue, green, red
-    lower = (0,0,100)
-    upper = (70,70,255)
+    # Each contour is an array of (x,y) coordinates of boundary points of the objects
+    oxContours, _ = cv2.findContours(gridThreshI, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
 
-    # TODO Need to blur original first?
-    mask = cv2.inRange(originalI, lower, upper)
-    #redThreshI = cv2.bitwise_and(originalI, originalI, mask = mask)
-    #mask_rgb = cv2.cvtColor(mask,cv2.COLOR_GRAY2BGR)
-    #redThreshI = originalI & mask_rgb
+    # Print out properties of the contours found
+    #contours_properties(oxContours)
 
-    #cv2.imshow(testName + "red", redThreshI)
-    
-    # Merge the image and mask
-    maskedRedThreshI = cv2.copyTo(grayI, mask)
-    maskedOriginalI = cv2.copyTo(originalI, mask)
-    
-    cv2.imshow(testName, maskedRedThreshI)
-    cv2.imshow(testName, maskedOriginalI)
-    cv2.waitKey(0)
+    # Decide if it is an O, X or none
+    if len(oxContours) == 0:
+        return(DETECTEDNONE)
+    elif len(oxContours) == 1:
+        return(DETECTEDX)
+    elif len(oxContours) == 2:
+        return(DETECTEDO)
+    else:
+        contours_properties(oxContours)
+        return(-1)
 
-    #Find the contour of the shape inside the grid square
-    #contours, _ = cv2.findContours(maskedRedThreshI, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    #allcontoursI = cv2.drawContours(maskedOriginalI.copy(), contours, -1, GREEN, 3)
-    #cv2.imshow(testName, allcontoursI)
-
-    #print(testName + " has " + str(len(contours)) + " Contours")
-    #for c in contours:
-    #    contour_properties(c)
 
 
 # Main
@@ -159,57 +155,53 @@ if cap.isOpened():
         threshI = cv2.adaptiveThreshold(blurI, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,\
             cv2.THRESH_BINARY_INV, 51, 4)
 
-        print("Grayscaled, Blured & Thresholded image")
-        cv2.imshow("threshI", threshI)
-        cv2.waitKey(0)
+        #print("Grayscaled, Blured & Thresholded image")
+        #cv2.imshow("threshI", threshI)
+        #cv2.waitKey(0)
         
         # Find all the contours in the image
         # Each contour is an array of (x,y) coordinates of boundary points of the objects
         contours, _ = cv2.findContours(threshI, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
         # Draw all contours
-        allcontoursI = cv2.drawContours(originalI.copy(), contours, -1, GREEN, 3)
-        
-        print("Contoured image")
-        cv2.imshow("allcontoursI", allcontoursI)
-        cv2.waitKey(0)
-        cv2.destroyWindow("allcontoursI")
+        #allcontoursI = cv2.drawContours(originalI.copy(), contours, -1, GREEN, 3)
+        #print("Contoured image")
+        #cv2.imshow("allcontoursI", allcontoursI)
+        #cv2.waitKey(0)
+        #cv2.destroyWindow("allcontoursI")
         
         # Find the contour with the largest area - ie the outside square of the grid
-        # ToDo Make this routine safer - 4 sides?
+        # ToDo later - Make this routine safer - 4 sides?
         # Minimum area to consider is 1000
-        max_area = 1000
-        for c, contour in enumerate(contours):
+        maxArea = 1000
+        for contour in contours:
             area = cv2.contourArea(contour)
-            if area > max_area:
-                max_area = area
-                best_contour = contour
+            if area > maxArea:
+                maxArea = area
+                boardContour = contour
 
         # Increase size of contour so we dont loose outer black box
-        best_contour = scale_contour(best_contour, 1.05)
+        boardContour = scale_contour(boardContour, 1.05)
 
         # Create a mask of the largest contour
         mask = np.zeros((grayI.shape), np.uint8) # Return a new array of zeros of grayI.shape size of type uint8
         # drawcontours(source_image, contours, contours_ID, contour_color, contour_thickness)
-        cv2.drawContours(mask, [best_contour], 0, BLACK, -1) # -1 means everything outside the contour
-        #cv2.drawContours(mask, [best_contour], 0, WHITE, 2) 
-
+        cv2.drawContours(mask, [boardContour], 0, BLACK, -1) # -1 means everything outside the contour
         # Merge the thresholded image and mask
-        #maskedI = np.zeros_like(threshI)
-        #maskedI[mask == 255] = threshI[mask == 255]
-        maskedI = cv2.copyTo(threshI, mask)
+        boardThreshI = cv2.copyTo(threshI, mask)
 
-        print("Largest contour masked")
-        cv2.imshow("maskedI", maskedI)
-        cv2.waitKey(0)# Must always waitKey after an imshow, 0 is for a key, or ms
-        cv2.destroyWindow("maskedI")
+        #print("Largest contour masked")
+        #cv2.imshow("boardThreshI", boardThreshI)
+        #cv2.waitKey(0) # Must always waitKey after an imshow, 0 is for a key, or ms
+        #cv2.destroyWindow("boardThreshI")
 
         # Find the contours in the masked image
-        contours, _ = cv2.findContours(maskedI, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        contours, _ = cv2.findContours(boardThreshI, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
+        # Find the 9 contours of the Noughts and crosses board
         # Find all contours with area greater than X and less than Y
-        # Removes any small error contours and and the largest box 
-        # (grid surrounding, as it is drawn out by edges of smaller boxes)
+        # Removes any small error contours and and the board contour
+        # ToDo later - Make this routine safer and able to cope with different sizes
         gridContours = []
         for contour in contours:
             area = cv2.contourArea(contour)
@@ -221,28 +213,28 @@ if cap.isOpened():
         if len(gridContours) != 9:
             print("ERROR: Not 9 grid squares detected!")
         else:
-            gridI = cv2.drawContours(originalI.copy(), gridContours, -1, GREEN, 3)
-            
-            print("Nine grid squares image")
-            cv2.imshow("Masked Grid Image", gridI)
-            cv2.waitKey(0)# Must always waitKey after an imshow, 0 is for a key, or ms
-            cv2.destroyWindow("Masked Grid Image")
+            print("9 grid squares detected") 
+
+            #gridI = cv2.drawContours(originalI.copy(), gridContours, -1, GREEN, 3
+            #print("Nine grid squares image")
+            #cv2.imshow("Nine grid squares image", gridI)
+            #cv2.waitKey(0) # Must always waitKey after an imshow, 0 is for a key, or ms
+            #cv2.destroyWindow("Masked Grid Image")
 
             # Sort gridContours into the same order as board
             gridContours.sort(key=lambda gC:contour_position(gC))
 
-            ox_detection(gridContours[0], "Small Grid 0")
-            ox_detection(gridContours[1], "Small Grid 1")
-            ox_detection(gridContours[2], "Small Grid 2") 
+            for c in range(9):
+                print( str(ox_detection(gridContours[c])))
 
-            cv2.waitKey(0)
+        # Do nothing untill we get an Esc key, and then quit
+        while True:
+            keyCode = cv2.waitKey(100) # Must always waitKey after an imshow, 0 is for a key, or ms
+            if keyCode == 27:
+                break
             
-        # This also acts as (Copied notes - what does this mean? -Luke)
-        #keyCode = cv2.waitKey(30) & 0xFF
-        # Stop the program on the ESC key
-        #if keyCode == 27:
-        #    break
     cap.release()
     cv2.destroyAllWindows()
+    print("--- Released Camera and Destroyed Windows ---")
 else:
     print("--- UNABLE TO OPEN CAMERA ---")
